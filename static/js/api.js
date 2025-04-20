@@ -37,6 +37,11 @@ const API = {
     console.log('Making API request to:', url);
     
     try {
+      // Log request body for debugging
+      if (options.body) {
+        console.log('Request body:', options.body);
+      }
+      
       const response = await fetch(url, {
         ...options,
         headers: {
@@ -44,6 +49,9 @@ const API = {
           ...options.headers
         }
       });
+      
+      // Log response status
+      console.log(`Response status: ${response.status} ${response.statusText}`);
       
       if (response.status === 401) {
         // Unauthorized, clear token
@@ -58,9 +66,10 @@ const API = {
       
       try {
         const data = await response.json();
+        console.log('Response data:', data);
         
         if (!response.ok) {
-          throw new Error(data.detail || 'Something went wrong');
+          throw new Error(data.detail || JSON.stringify(data) || 'Something went wrong');
         }
         
         return data;
@@ -118,7 +127,13 @@ const API = {
       params.append('search', search);
     }
     
-    return this.request(`/videos?${params.toString()}`);
+    try {
+      return await this.request(`/videos?${params.toString()}`);
+    } catch (error) {
+      console.error('Error in getVideos:', error);
+      // Return empty array instead of throwing
+      return [];
+    }
   },
   
   async getVideoById(videoId) {

@@ -266,10 +266,10 @@ function loadUserVideos(userId) {
   
   API.getVideos(1, 50, '')
     .then(videos => {
-      // Filter videos by user ID
-      const userVideos = videos.filter(video => video.user_id === userId);
+      // Filter videos by user ID (if videos is null or undefined, use empty array)
+      const userVideos = (videos || []).filter(video => video.user_id === userId);
       
-      if (userVideos.length === 0) {
+      if (!userVideos || userVideos.length === 0) {
         videosContainer.innerHTML = `
           <div class="no-videos">
             <p>You haven't uploaded any videos yet.</p>
@@ -286,9 +286,11 @@ function loadUserVideos(userId) {
       });
     })
     .catch(error => {
+      console.error('Error loading user videos:', error);
       videosContainer.innerHTML = `
         <div class="error">
           <p>Error loading videos: ${error.message}</p>
+          <button onclick="loadUserVideos('${userId}')" class="btn">Try Again</button>
         </div>
       `;
     });

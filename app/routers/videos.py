@@ -16,6 +16,7 @@ async def create_video(
     current_user: UserInDB = Depends(get_current_user),
     db = Depends(get_database)
 ):
+    """Create a new video"""
     video_in_db = VideoInDB(
         **video.dict(),
         user_id=current_user.id
@@ -38,6 +39,7 @@ async def get_videos(
     search: Optional[str] = None,
     db = Depends(get_database)
 ):
+    """Get a list of videos with pagination and search"""
     query = {}
     if search:
         query = {"$or": [
@@ -45,29 +47,38 @@ async def get_videos(
             {"description": {"$regex": search, "$options": "i"}}
         ]}
     
-    cursor = db["videos"].find(query).sort("created_at", -1).skip(skip).limit(limit)
-    videos = await cursor.to_list(length=limit)
-    
-    # Get user info for each video
-    result = []
-    for video in videos:
-        # Convert ObjectIds to strings
-        video["_id"] = str(video["_id"])
-        video["user_id"] = str(video["user_id"])
+    try:
+        cursor = db["videos"].find(query).sort("created_at", -1).skip(skip).limit(limit)
+        videos = await cursor.to_list(length=limit)
         
-        user = await db["users"].find_one({"_id": ObjectId(video["user_id"])})
-        if user:
-            video_with_user = {
-                **video,
-                "username": user["username"],
-                "user_profile_image": user.get("profile_image")
-            }
-            result.append(video_with_user)
-    
-    return result
+        # If no videos, return empty list
+        if not videos:
+            return []
+        
+        # Get user info for each video
+        result = []
+        for video in videos:
+            # Convert ObjectIds to strings
+            video["_id"] = str(video["_id"])
+            video["user_id"] = str(video["user_id"])
+            
+            user = await db["users"].find_one({"_id": ObjectId(video["user_id"])})
+            if user:
+                video_with_user = {
+                    **video,
+                    "username": user["username"],
+                    "user_profile_image": user.get("profile_image")
+                }
+                result.append(video_with_user)
+        
+        return result
+    except Exception as e:
+        print(f"Error getting videos: {e}")
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @router.get("/{video_id}", response_model=VideoWithUser)
 async def get_video(video_id: str, db = Depends(get_database)):
+    """Get a single video by ID"""
     if not ObjectId.is_valid(video_id):
         raise HTTPException(status_code=400, detail="Invalid video ID")
     
@@ -104,6 +115,7 @@ async def like_video(
     current_user: UserInDB = Depends(get_current_user),
     db = Depends(get_database)
 ):
+    """Like or unlike a video"""
     if not ObjectId.is_valid(video_id):
         raise HTTPException(status_code=400, detail="Invalid video ID")
     
