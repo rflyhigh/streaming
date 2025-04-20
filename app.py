@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from typing import List, Optional
 from datetime import datetime, timedelta
@@ -233,11 +233,19 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     
     return {"access_token": access_token, "token_type": "bearer"}
 
-@app.get("/api/users/me", response_model=UserResponse)
+@app.get("/api/users/me")
 async def read_users_me(current_user: UserInDB = Depends(get_current_user)):
-    return current_user
+    # Convert to dict and ensure _id is a string
+    user_dict = current_user.dict(by_alias=True)
+    user_dict["_id"] = str(user_dict["_id"])
+    
+    # Remove hashed_password from response
+    if "hashed_password" in user_dict:
+        del user_dict["hashed_password"]
+    
+    return user_dict
 
-@app.get("/api/users/{user_id}", response_model=UserResponse)
+@app.get("/api/users/{user_id}")
 async def get_user(user_id: str):
     if not ObjectId.is_valid(user_id):
         raise HTTPException(status_code=400, detail="Invalid user ID")
@@ -249,9 +257,13 @@ async def get_user(user_id: str):
     # Convert ObjectId to string
     user["_id"] = str(user["_id"])
     
+    # Remove hashed_password from response
+    if "hashed_password" in user:
+        del user["hashed_password"]
+    
     return user
 
-@app.get("/api/videos", response_model=List[VideoWithUser])
+@app.get("/api/videos")
 async def get_videos(skip: int = 0, limit: int = 20, search: Optional[str] = None):
     query = {}
     if search:
@@ -289,7 +301,7 @@ async def get_videos(skip: int = 0, limit: int = 20, search: Optional[str] = Non
         print(f"Error getting videos: {e}")
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
-@app.post("/api/videos", response_model=VideoResponse, status_code=201)
+@app.post("/api/videos", status_code=201)
 async def create_video(video: VideoCreate, current_user: UserInDB = Depends(get_current_user)):
     video_in_db = VideoInDB(
         **video.dict(),
@@ -306,7 +318,7 @@ async def create_video(video: VideoCreate, current_user: UserInDB = Depends(get_
     
     return created_video
 
-@app.get("/api/videos/{video_id}", response_model=VideoWithUser)
+@app.get("/api/videos/{video_id}")
 async def get_video(video_id: str):
     if not ObjectId.is_valid(video_id):
         raise HTTPException(status_code=400, detail="Invalid video ID")
