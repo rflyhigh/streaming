@@ -33,6 +33,10 @@ async def register(user: UserCreate, db = Depends(get_database)):
     
     created_user = await db["users"].find_one({"_id": result.inserted_id})
     
+    # Convert ObjectId to string before returning
+    if created_user:
+        created_user["_id"] = str(created_user["_id"])
+    
     return created_user
 
 @router.post("/token", response_model=Token)

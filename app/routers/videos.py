@@ -25,6 +25,10 @@ async def create_video(
     
     created_video = await db["videos"].find_one({"_id": result.inserted_id})
     
+    # Convert ObjectIds to strings
+    created_video["_id"] = str(created_video["_id"])
+    created_video["user_id"] = str(created_video["user_id"])
+    
     return created_video
 
 @router.get("/", response_model=List[VideoWithUser])
@@ -47,7 +51,11 @@ async def get_videos(
     # Get user info for each video
     result = []
     for video in videos:
-        user = await db["users"].find_one({"_id": video["user_id"]})
+        # Convert ObjectIds to strings
+        video["_id"] = str(video["_id"])
+        video["user_id"] = str(video["user_id"])
+        
+        user = await db["users"].find_one({"_id": ObjectId(video["user_id"])})
         if user:
             video_with_user = {
                 **video,
@@ -77,6 +85,10 @@ async def get_video(video_id: str, db = Depends(get_database)):
     user = await db["users"].find_one({"_id": video["user_id"]})
     if not user:
         raise HTTPException(status_code=404, detail="Video creator not found")
+    
+    # Convert ObjectIds to strings
+    video["_id"] = str(video["_id"])
+    video["user_id"] = str(video["user_id"])
     
     video_with_user = {
         **video,

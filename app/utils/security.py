@@ -21,6 +21,8 @@ def get_password_hash(password):
 async def get_user_by_email(db, email: str):
     user = await db["users"].find_one({"email": email})
     if user:
+        # Convert ObjectId to string
+        user["_id"] = str(user["_id"])
         return UserInDB(**user)
 
 async def authenticate_user(db, email: str, password: str):
@@ -55,7 +57,12 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db = Depends(get
         token_data = TokenData(email=email)
     except JWTError:
         raise credentials_exception
-    user = await get_user_by_email(db, email=token_data.email)
+    
+    user = await db["users"].find_one({"email": token_data.email})
     if user is None:
         raise credentials_exception
-    return user
+    
+    # Convert ObjectId to string
+    user["_id"] = str(user["_id"])
+    
+    return UserInDB(**user)

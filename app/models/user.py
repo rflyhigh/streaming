@@ -37,7 +37,7 @@ class UserInDB(UserBase):
         json_encoders = {ObjectId: str}
 
 class UserResponse(UserBase):
-    id: str = Field(..., alias="_id")
+    id: str = Field(..., alias="_id")  # Changed from PyObjectId to str
     created_at: datetime
     profile_image: Optional[str] = None
     

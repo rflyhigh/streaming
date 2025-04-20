@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 import uvicorn
 from .routers import auth, videos, users
 from .db import connect_to_mongodb, close_mongodb_connection
@@ -35,6 +35,10 @@ templates = Jinja2Templates(directory="templates")
 # Frontend route
 @app.get("/{full_path:path}", response_class=HTMLResponse)
 async def serve_frontend(request: Request, full_path: str):
+    # Check if it's a static file request without /static prefix
+    if full_path.startswith(('css/', 'js/', 'assets/')):
+        return RedirectResponse(url=f"/static/{full_path}")
+    
     return templates.TemplateResponse("index.html", {"request": request})
 
 if __name__ == "__main__":

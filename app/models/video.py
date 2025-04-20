@@ -27,8 +27,8 @@ class VideoInDB(VideoBase):
         json_encoders = {ObjectId: str}
 
 class VideoResponse(VideoBase):
-    id: str = Field(..., alias="_id")
-    user_id: str
+    id: str = Field(..., alias="_id")  # Changed from PyObjectId to str
+    user_id: str  # Changed from PyObjectId to str
     created_at: datetime
     views: int
     likes: int
