@@ -1,10 +1,10 @@
-from fastapi import FastAPI, Request, HTTPException, Depends
+from fastapi import FastAPI, Request, HTTPException, Depends, Query, UploadFile, File
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 from bson import ObjectId
 from pydantic import BaseModel, Field, EmailStr
@@ -12,6 +12,9 @@ from passlib.context import CryptContext
 from jose import JWTError, jwt
 import motor.motor_asyncio
 import os
+import io
+import aiohttp
+import asyncio
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -23,7 +26,6 @@ DB_NAME = os.getenv("DB_NAME", "streaming_platform")
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-here")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
-WORKER_URL = os.getenv("WORKER_URL", "https://lively-wind-62c0.skibiditoilet-9330jk.workers.dev")
 
 # Create FastAPI app
 app = FastAPI(title="Streaming Platform")
@@ -180,8 +182,36 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     
     return UserInDB(**user)
 
+# Video streaming function
+async def stream_video(url: str):
+    """Stream video from URL directly through the server"""
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            if response.status != 200:
+                raise HTTPException(status_code=response.status, detail="Failed to fetch video")
+            
+            # Get content type and headers
+            content_type = response.headers.get("Content-Type", "video/mp4")
+            
+            # Create async generator to stream the content
+            async def generate():
+                while True:
+                    chunk = await response.content.read(1024 * 1024)  # 1MB chunks
+                    if not chunk:
+                        break
+                    yield chunk
+            
+            return StreamingResponse(
+                generate(),
+                media_type=content_type,
+                headers={
+                    "Accept-Ranges": "bytes",
+                    "Content-Type": content_type,
+                }
+            )
+
 # API routes
-@app.post("/api/auth/register", response_model=UserResponse)
+@app.post("/api/auth/register")
 async def register(user: UserCreate):
     # Check if user exists
     existing_user = await db["users"].find_one({"email": user.email})
@@ -207,6 +237,10 @@ async def register(user: UserCreate):
     
     # Convert ObjectId to string
     created_user["_id"] = str(created_user["_id"])
+    
+    # Remove hashed_password from response
+    if "hashed_password" in created_user:
+        del created_user["hashed_password"]
     
     return created_user
 
@@ -397,6 +431,17 @@ async def like_video(video_id: str, current_user: UserInDB = Depends(get_current
         "message": message,
         "likes": updated_video["likes"]
     }
+
+# Direct video streaming endpoint - no need for Cloudflare Worker
+@app.get("/api/stream")
+async def stream_video_endpoint(url: str):
+    if not url:
+        raise HTTPException(status_code=400, detail="Missing URL parameter")
+    
+    try:
+        return await stream_video(url)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error streaming video: {str(e)}")
 
 # Debug endpoints
 @app.get("/debug/routes")

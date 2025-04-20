@@ -1,3 +1,4 @@
+/* Dark Theme Variables */
 :root {
   --bg-primary: #0e0e10;
   --bg-secondary: #18181b;
@@ -11,6 +12,7 @@
   --border-color: #303032;
 }
 
+/* Base Styles */
 body {
   background-color: var(--bg-primary);
   color: var(--text-primary);
@@ -59,6 +61,7 @@ input:focus, textarea:focus, select:focus {
   border-color: var(--accent-color);
 }
 
+/* Header */
 header {
   background-color: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
@@ -129,6 +132,7 @@ nav ul {
   color: var(--text-primary);
 }
 
+/* Footer */
 footer {
   background-color: var(--bg-secondary);
   border-top: 1px solid var(--border-color);
@@ -138,6 +142,7 @@ footer {
   margin-top: 2rem;
 }
 
+/* Loading and Error States */
 .loading {
   display: flex;
   justify-content: center;
@@ -337,6 +342,161 @@ footer {
 
 .upload-container h2 {
   margin-bottom: 20px;
+}
+
+/* Custom Video Player */
+.custom-video-player {
+  position: relative;
+  width: 100%;
+  height: 0;
+  padding-bottom: 56.25%; /* 16:9 aspect ratio */
+  background-color: black;
+}
+
+.custom-video-player video {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.video-controls {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.7));
+  padding: 10px;
+  display: flex;
+  align-items: center;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.custom-video-player:hover .video-controls {
+  opacity: 1;
+}
+
+.play-pause-btn, .fullscreen-btn {
+  background: transparent;
+  border: none;
+  color: white;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 5px;
+}
+
+.progress-bar {
+  flex-grow: 1;
+  height: 5px;
+  background-color: rgba(255, 255, 255, 0.3);
+  margin: 0 10px;
+  position: relative;
+  cursor: pointer;
+  border-radius: 2px;
+}
+
+.progress {
+  height: 100%;
+  background-color: var(--accent-color);
+  width: 0;
+  border-radius: 2px;
+}
+
+.time-display {
+  color: white;
+  font-size: 0.8rem;
+  margin-left: 10px;
+}
+
+.video-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.video-overlay.visible {
+  opacity: 1;
+}
+
+.play-icon {
+  font-size: 3rem;
+  color: white;
+}
+
+.video-error {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.7);
+  color: var(--danger-color);
+  text-align: center;
+  padding: 20px;
+}
+
+/* Profile Page */
+.profile-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.profile-header {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 30px;
+}
+
+.profile-avatar {
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  overflow: hidden;
+}
+
+.profile-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-info h1 {
+  margin: 0 0 5px 0;
+}
+
+.profile-info p {
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.profile-content h2 {
+  margin-top: 0;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 10px;
+}
+
+.no-videos {
+  text-align: center;
+  padding: 30px;
+  background-color: var(--bg-secondary);
+  border-radius: 8px;
+}
+
+.no-videos p {
+  margin-bottom: 15px;
 }
 
 /* Responsive Design */
