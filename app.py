@@ -185,15 +185,26 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
 # Video streaming function
 async def stream_video(url: str):
     """Stream video from URL directly through the server"""
+    print(f"Attempting to stream video from: {url}")
     try:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        }
+        
         async with aiohttp.ClientSession() as session:
-            async with session.get(url, allow_redirects=True) as response:
+            async with session.get(url, headers=headers, allow_redirects=True) as response:
+                print(f"Stream response status: {response.status}")
+                
                 if response.status != 200:
-                    raise HTTPException(status_code=response.status, detail="Failed to fetch video")
+                    print(f"Failed to fetch video: {await response.text()}")
+                    raise HTTPException(status_code=response.status, detail=f"Failed to fetch video: {response.status}")
                 
                 # Get content type and headers
                 content_type = response.headers.get("Content-Type", "video/mp4")
                 content_length = response.headers.get("Content-Length")
+                
+                print(f"Content-Type: {content_type}")
+                print(f"Content-Length: {content_length}")
                 
                 headers = {
                     "Content-Type": content_type,
@@ -205,8 +216,12 @@ async def stream_video(url: str):
                 
                 # Create async generator to stream the content
                 async def generate():
-                    async for chunk in response.content.iter_chunked(1024 * 1024):  # 1MB chunks
-                        yield chunk
+                    try:
+                        async for chunk in response.content.iter_chunked(1024 * 1024):  # 1MB chunks
+                            yield chunk
+                    except Exception as e:
+                        print(f"Error during streaming: {str(e)}")
+                        raise
                 
                 return StreamingResponse(
                     generate(),
@@ -445,9 +460,12 @@ async def stream_video_endpoint(url: str):
     if not url:
         raise HTTPException(status_code=400, detail="Missing URL parameter")
     
+    print(f"Stream request received for URL: {url}")
+    
     try:
         return await stream_video(url)
     except Exception as e:
+        print(f"Error streaming video: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error streaming video: {str(e)}")
 
 # Debug endpoints
@@ -524,6 +542,124 @@ async def debug_test_stream():
                 videoPlayer.play().catch(err => {
                     console.error('Play failed:', err);
                 });
+            }
+            
+            // Load a default video on page load
+            window.onload = loadVideo;
+        </script>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html_content)
+
+@app.get("/debug/direct-stream-test")
+async def debug_direct_stream_test():
+    """Test page for direct video streaming"""
+    html_content = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Direct Stream Test</title>
+        <style>
+            body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background-color: #0e0e10; color: #fff; }
+            .video-container { width: 100%; margin: 20px 0; }
+            video { width: 100%; background: #000; }
+            input { width: 100%; padding: 10px; margin-bottom: 10px; background: #18181b; border: 1px solid #303032; color: #fff; }
+            button { padding: 10px 20px; background: #53fc18; color: #000; border: none; cursor: pointer; font-weight: bold; }
+            button:hover { background: #3dd909; }
+            h1 { color: #53fc18; }
+            #error { margin-top: 10px; }
+            pre { background: #18181b; padding: 10px; overflow: auto; }
+        </style>
+    </head>
+    <body>
+        <h1>Direct Stream Test</h1>
+        <div>
+            <input type="text" id="video-url" placeholder="Enter video URL" 
+                   value="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4">
+            <button onclick="loadVideo()">Load Video</button>
+        </div>
+        <div class="video-container">
+            <video id="video-player" controls></video>
+        </div>
+        <div id="error" style="color: #ff4d4d;"></div>
+        <div>
+            <h2>Debug Info:</h2>
+            <pre id="debug-info"></pre>
+        </div>
+        
+        <script>
+            function loadVideo() {
+                const videoUrl = document.getElementById('video-url').value;
+                const errorDiv = document.getElementById('error');
+                const debugInfo = document.getElementById('debug-info');
+                errorDiv.textContent = '';
+                
+                if (!videoUrl) {
+                    errorDiv.textContent = 'Please enter a video URL';
+                    return;
+                }
+                
+                // Log the process
+                debugInfo.textContent = 'Starting video load process...\\n';
+                
+                const encodedUrl = encodeURIComponent(videoUrl);
+                const streamUrl = `/api/stream?url=${encodedUrl}`;
+                
+                debugInfo.textContent += `Original URL: ${videoUrl}\\n`;
+                debugInfo.textContent += `Encoded URL: ${encodedUrl}\\n`;
+                debugInfo.textContent += `Stream URL: ${streamUrl}\\n`;
+                
+                // First try to fetch the headers to see if the endpoint works
+                fetch(streamUrl, { method: 'HEAD' })
+                    .then(response => {
+                        debugInfo.textContent += `HEAD request status: ${response.status} ${response.statusText}\\n`;
+                        
+                        // Log headers
+                        debugInfo.textContent += 'Response headers:\\n';
+                        for (let [key, value] of response.headers.entries()) {
+                            debugInfo.textContent += `${key}: ${value}\\n`;
+                        }
+                        
+                        if (response.ok) {
+                            // Now try to load the video
+                            const videoPlayer = document.getElementById('video-player');
+                            videoPlayer.src = streamUrl;
+                            
+                            videoPlayer.onerror = function() {
+                                errorDiv.textContent = 'Error loading video: ' + (videoPlayer.error ? videoPlayer.error.message : 'Unknown error');
+                                debugInfo.textContent += `Video error: ${videoPlayer.error ? videoPlayer.error.message : 'Unknown error'}\\n`;
+                            };
+                            
+                            videoPlayer.onloadstart = function() {
+                                debugInfo.textContent += 'Video load started\\n';
+                            };
+                            
+                            videoPlayer.onloadedmetadata = function() {
+                                debugInfo.textContent += `Video metadata loaded: ${videoPlayer.videoWidth}x${videoPlayer.videoHeight}, duration: ${videoPlayer.duration}s\\n`;
+                            };
+                            
+                            videoPlayer.oncanplay = function() {
+                                debugInfo.textContent += 'Video can play now\\n';
+                            };
+                            
+                            videoPlayer.onplaying = function() {
+                                debugInfo.textContent += 'Video is playing\\n';
+                            };
+                            
+                            videoPlayer.load();
+                            videoPlayer.play().catch(err => {
+                                debugInfo.textContent += `Play failed: ${err.message}\\n`;
+                                console.error('Play failed:', err);
+                            });
+                        } else {
+                            errorDiv.textContent = `Error: ${response.status} ${response.statusText}`;
+                        }
+                    })
+                    .catch(err => {
+                        debugInfo.textContent += `Fetch error: ${err.message}\\n`;
+                        errorDiv.textContent = `Fetch error: ${err.message}`;
+                    });
             }
             
             // Load a default video on page load
