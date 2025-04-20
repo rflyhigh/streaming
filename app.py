@@ -185,30 +185,37 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
 # Video streaming function
 async def stream_video(url: str):
     """Stream video from URL directly through the server"""
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as response:
-            if response.status != 200:
-                raise HTTPException(status_code=response.status, detail="Failed to fetch video")
-            
-            # Get content type and headers
-            content_type = response.headers.get("Content-Type", "video/mp4")
-            
-            # Create async generator to stream the content
-            async def generate():
-                while True:
-                    chunk = await response.content.read(1024 * 1024)  # 1MB chunks
-                    if not chunk:
-                        break
-                    yield chunk
-            
-            return StreamingResponse(
-                generate(),
-                media_type=content_type,
-                headers={
-                    "Accept-Ranges": "bytes",
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, allow_redirects=True) as response:
+                if response.status != 200:
+                    raise HTTPException(status_code=response.status, detail="Failed to fetch video")
+                
+                # Get content type and headers
+                content_type = response.headers.get("Content-Type", "video/mp4")
+                content_length = response.headers.get("Content-Length")
+                
+                headers = {
                     "Content-Type": content_type,
+                    "Accept-Ranges": "bytes"
                 }
-            )
+                
+                if content_length:
+                    headers["Content-Length"] = content_length
+                
+                # Create async generator to stream the content
+                async def generate():
+                    async for chunk in response.content.iter_chunked(1024 * 1024):  # 1MB chunks
+                        yield chunk
+                
+                return StreamingResponse(
+                    generate(),
+                    media_type=content_type,
+                    headers=headers
+                )
+    except Exception as e:
+        print(f"Streaming error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Streaming error: {str(e)}")
 
 # API routes
 @app.post("/api/auth/register")
@@ -460,6 +467,72 @@ async def debug_routes():
 async def debug_api_test():
     """Simple API test endpoint"""
     return {"status": "ok", "message": "API is working"}
+
+@app.get("/debug/test-stream")
+async def debug_test_stream():
+    """Test page for video streaming"""
+    html_content = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Stream Test</title>
+        <style>
+            body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background-color: #0e0e10; color: #fff; }
+            .video-container { width: 100%; margin: 20px 0; }
+            video { width: 100%; background: #000; }
+            input { width: 100%; padding: 10px; margin-bottom: 10px; background: #18181b; border: 1px solid #303032; color: #fff; }
+            button { padding: 10px 20px; background: #53fc18; color: #000; border: none; cursor: pointer; font-weight: bold; }
+            button:hover { background: #3dd909; }
+            h1 { color: #53fc18; }
+            #error { margin-top: 10px; }
+        </style>
+    </head>
+    <body>
+        <h1>Video Stream Test</h1>
+        <div>
+            <input type="text" id="video-url" placeholder="Enter video URL" 
+                   value="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4">
+            <button onclick="loadVideo()">Load Video</button>
+        </div>
+        <div class="video-container">
+            <video id="video-player" controls></video>
+        </div>
+        <div id="error" style="color: #ff4d4d;"></div>
+        
+        <script>
+            function loadVideo() {
+                const videoUrl = document.getElementById('video-url').value;
+                const errorDiv = document.getElementById('error');
+                errorDiv.textContent = '';
+                
+                if (!videoUrl) {
+                    errorDiv.textContent = 'Please enter a video URL';
+                    return;
+                }
+                
+                const encodedUrl = encodeURIComponent(videoUrl);
+                const streamUrl = `/api/stream?url=${encodedUrl}`;
+                
+                const videoPlayer = document.getElementById('video-player');
+                videoPlayer.src = streamUrl;
+                
+                videoPlayer.onerror = function() {
+                    errorDiv.textContent = 'Error loading video: ' + (videoPlayer.error ? videoPlayer.error.message : 'Unknown error');
+                };
+                
+                videoPlayer.load();
+                videoPlayer.play().catch(err => {
+                    console.error('Play failed:', err);
+                });
+            }
+            
+            // Load a default video on page load
+            window.onload = loadVideo;
+        </script>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html_content)
 
 # Frontend route - This must be the last route
 @app.get("/{full_path:path}", response_class=HTMLResponse)

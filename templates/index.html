@@ -5,7 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Stream Platform</title>
     <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <meta name="description" content="A modern video streaming platform">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
     <header>
@@ -14,16 +18,13 @@
             <div class="search-container">
                 <input type="text" id="search-input" placeholder="Search videos...">
                 <button id="search-button">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="11" cy="11" r="8"></circle>
-                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                    </svg>
+                    <i class="fas fa-search"></i>
                 </button>
             </div>
         </div>
         <nav>
             <ul id="nav-menu">
-                <li><a href="/" class="nav-link">Home</a></li>
+                <li><a href="/" class="nav-link"><i class="fas fa-home"></i> Home</a></li>
                 <!-- Auth links will be added dynamically -->
             </ul>
         </nav>
@@ -31,11 +32,38 @@
 
     <main id="main-content">
         <!-- Content will be loaded here by JavaScript -->
-        <div class="loading">Loading...</div>
+        <div class="loading">
+            <div class="spinner"></div>
+            <p>Loading content...</p>
+        </div>
     </main>
 
     <footer>
         <div class="footer-content">
+            <div class="footer-logo">
+                <a href="/" class="logo">Stream<span>Platform</span></a>
+                <p>The next generation streaming platform</p>
+            </div>
+            <div class="footer-links">
+                <h3>Quick Links</h3>
+                <ul>
+                    <li><a href="/">Home</a></li>
+                    <li><a href="/upload">Upload</a></li>
+                    <li><a href="/login">Login</a></li>
+                    <li><a href="/register">Register</a></li>
+                </ul>
+            </div>
+            <div class="footer-social">
+                <h3>Connect With Us</h3>
+                <div class="social-icons">
+                    <a href="#" class="social-icon"><i class="fab fa-twitter"></i></a>
+                    <a href="#" class="social-icon"><i class="fab fa-facebook"></i></a>
+                    <a href="#" class="social-icon"><i class="fab fa-instagram"></i></a>
+                    <a href="#" class="social-icon"><i class="fab fa-youtube"></i></a>
+                </div>
+            </div>
+        </div>
+        <div class="footer-bottom">
             <p>&copy; 2023 StreamPlatform. All rights reserved.</p>
         </div>
     </footer>
@@ -44,7 +72,7 @@
     <template id="login-template">
         <div class="auth-container">
             <div class="auth-box">
-                <h2>Login</h2>
+                <h2>Login to StreamPlatform</h2>
                 <form id="login-form">
                     <div class="form-group">
                         <label for="login-email">Email</label>
@@ -67,7 +95,7 @@
     <template id="register-template">
         <div class="auth-container">
             <div class="auth-box">
-                <h2>Register</h2>
+                <h2>Create an Account</h2>
                 <form id="register-form">
                     <div class="form-group">
                         <label for="register-username">Username</label>
@@ -93,7 +121,7 @@
 
     <template id="upload-template">
         <div class="upload-container">
-            <h2>Upload Video</h2>
+            <h2><i class="fas fa-upload"></i> Upload Video</h2>
             <form id="upload-form">
                 <div class="form-group">
                     <label for="video-title">Title</label>
@@ -114,8 +142,19 @@
                     <small>Direct link to the thumbnail image (JPG, PNG)</small>
                 </div>
                 <div class="form-error" id="upload-error"></div>
-                <button type="submit" class="btn btn-primary">Upload Video</button>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-cloud-upload-alt"></i> Upload Video
+                </button>
             </form>
+            <div class="upload-tips">
+                <h3>Tips for a successful upload:</h3>
+                <ul>
+                    <li>Use a catchy title that accurately describes your content</li>
+                    <li>Add a detailed description to help viewers find your video</li>
+                    <li>Choose a high-quality thumbnail that represents your video well</li>
+                    <li>Make sure your video URL is a direct link to the video file</li>
+                </ul>
+            </div>
         </div>
     </template>
 
