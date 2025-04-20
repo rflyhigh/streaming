@@ -23,21 +23,23 @@ app.add_middleware(
 app.add_event_handler("startup", connect_to_mongodb)
 app.add_event_handler("shutdown", close_mongodb_connection)
 
-# API routes
+# Mount static files
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# API routes - MUST come after static files but before the catch-all route
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(videos.router, prefix="/api/videos", tags=["Videos"])
 app.include_router(users.router, prefix="/api/users", tags=["Users"])
 
-# Mount static files
-app.mount("/static", StaticFiles(directory="static"), name="static")
+# Templates
 templates = Jinja2Templates(directory="templates")
 
-# Frontend route - IMPORTANT: This must be the last route to avoid conflicts with API routes
+# Frontend route - This must be the last route
 @app.get("/{full_path:path}", response_class=HTMLResponse)
 async def serve_frontend(request: Request, full_path: str):
-    # Make sure this doesn't interfere with API routes
+    # Skip API routes - they're handled by the routers above
     if full_path.startswith("api/"):
-        raise HTTPException(status_code=404, detail="API endpoint not found")
+        raise HTTPException(status_code=404, detail="Not found")
     
     # Check if it's a static file request without /static prefix
     if full_path.startswith(('css/', 'js/', 'assets/')):

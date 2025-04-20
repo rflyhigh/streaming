@@ -1,6 +1,6 @@
 // API client for backend communication
 const API = {
-  // Base URL for API requests - ensure it starts with a slash
+  // Base URL for API requests
   baseUrl: '/api',
   
   // Worker URL for video streaming
@@ -15,7 +15,7 @@ const API = {
   getHeaders() {
     const headers = {
       'Content-Type': 'application/json',
-      'Accept': 'application/json'  // Explicitly request JSON
+      'Accept': 'application/json'
     };
     
     const token = this.getToken();
@@ -53,7 +53,9 @@ const API = {
         throw new Error('Session expired. Please login again.');
       }
       
-      // Try to parse as JSON, but handle gracefully if not JSON
+      // Get a clone of the response for text in case JSON parsing fails
+      const responseClone = response.clone();
+      
       try {
         const data = await response.json();
         
@@ -64,9 +66,9 @@ const API = {
         return data;
       } catch (parseError) {
         console.error('Error parsing JSON response:', parseError);
-        const text = await response.text();
+        const text = await responseClone.text();
         console.error('Non-JSON response:', text);
-        throw new Error('Server returned non-JSON response');
+        throw new Error(text || 'Server returned non-JSON response');
       }
     } catch (error) {
       console.error('API request error:', error);
