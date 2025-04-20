@@ -1,6 +1,6 @@
 // API client for backend communication
 const API = {
-  // Base URL for API requests
+  // Base URL for API requests - ensure it starts with a slash
   baseUrl: '/api',
   
   // Worker URL for video streaming
@@ -14,7 +14,8 @@ const API = {
   // Headers with auth token
   getHeaders() {
     const headers = {
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'  // Explicitly request JSON
     };
     
     const token = this.getToken();
@@ -27,7 +28,13 @@ const API = {
   
   // Generic request method
   async request(endpoint, options = {}) {
+    // Ensure endpoint starts with a slash
+    if (!endpoint.startsWith('/')) {
+      endpoint = '/' + endpoint;
+    }
+    
     const url = `${this.baseUrl}${endpoint}`;
+    console.log('Making API request to:', url);
     
     try {
       const response = await fetch(url, {
@@ -40,28 +47,27 @@ const API = {
       
       if (response.status === 401) {
         // Unauthorized, clear token
-        Auth.logout();
+        if (typeof Auth !== 'undefined') {
+          Auth.logout();
+        }
         throw new Error('Session expired. Please login again.');
       }
       
-      // Check content type
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
+      // Try to parse as JSON, but handle gracefully if not JSON
+      try {
+        const data = await response.json();
+        
+        if (!response.ok) {
+          throw new Error(data.detail || 'Something went wrong');
+        }
+        
+        return data;
+      } catch (parseError) {
+        console.error('Error parsing JSON response:', parseError);
         const text = await response.text();
         console.error('Non-JSON response:', text);
         throw new Error('Server returned non-JSON response');
       }
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || 'Something went wrong');
-      }
-      
-      if (response.status === 204) {
-        return null;
-      }
-      
-      return await response.json();
     } catch (error) {
       console.error('API request error:', error);
       throw error;

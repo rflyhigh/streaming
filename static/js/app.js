@@ -39,6 +39,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // Home page
+// Home page
 function loadHomePage() {
   const mainContent = document.getElementById('main-content');
   const urlParams = new URLSearchParams(window.location.search);
@@ -50,7 +51,7 @@ function loadHomePage() {
   // Fetch videos
   API.getVideos(1, 20, searchQuery)
     .then(videos => {
-      if (videos.length === 0) {
+      if (!videos || videos.length === 0) {
         mainContent.innerHTML = `
           <div class="no-results">
             <h2>${searchQuery ? 'No videos found for "' + searchQuery + '"' : 'No videos available'}</h2>
@@ -82,9 +83,11 @@ function loadHomePage() {
       mainContent.appendChild(videoGrid);
     })
     .catch(error => {
+      console.error('Error in loadHomePage:', error);
       mainContent.innerHTML = `
         <div class="error">
           <p>Error loading videos: ${error.message}</p>
+          <button onclick="loadHomePage()" class="btn">Try Again</button>
         </div>
       `;
     });

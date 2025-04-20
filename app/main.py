@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
@@ -32,9 +32,13 @@ app.include_router(users.router, prefix="/api/users", tags=["Users"])
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-# Frontend route
+# Frontend route - IMPORTANT: This must be the last route to avoid conflicts with API routes
 @app.get("/{full_path:path}", response_class=HTMLResponse)
 async def serve_frontend(request: Request, full_path: str):
+    # Make sure this doesn't interfere with API routes
+    if full_path.startswith("api/"):
+        raise HTTPException(status_code=404, detail="API endpoint not found")
+    
     # Check if it's a static file request without /static prefix
     if full_path.startswith(('css/', 'js/', 'assets/')):
         return RedirectResponse(url=f"/static/{full_path}")
