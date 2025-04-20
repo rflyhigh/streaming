@@ -162,6 +162,48 @@ function formatViews(views) {
       });
   }
   
+  // Create an iframe player
+  function createIframePlayer(videoUrl) {
+    // Create an iframe element
+    const iframe = document.createElement('iframe');
+    iframe.style.width = '100%';
+    iframe.style.height = '100%';
+    iframe.style.border = 'none';
+    iframe.allowFullscreen = true;
+    
+    // For MKV files or other formats that might not play directly in browsers
+    // Try to use an external player that supports them
+    if (videoUrl.toLowerCase().endsWith('.mkv')) {
+      // Use an external player that supports MKV
+      iframe.src = `https://www.hlsplayer.org/play?url=${encodeURIComponent(videoUrl)}`;
+    } else {
+      // For MP4 and other common formats, create a simple HTML player page
+      const playerHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Video Player</title>
+          <style>
+            body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
+            video { width: 100%; height: 100%; }
+          </style>
+        </head>
+        <body>
+          <video controls autoplay src="${videoUrl}"></video>
+        </body>
+        </html>
+      `;
+      
+      // Create a blob URL for the HTML content
+      const blob = new Blob([playerHtml], { type: 'text/html' });
+      iframe.src = URL.createObjectURL(blob);
+    }
+    
+    return iframe;
+  }
+  
   // ==================== API CLIENT ====================
   // API client for backend communication
   const API = {
@@ -555,6 +597,9 @@ function formatViews(views) {
             <button id="direct-video" class="btn btn-secondary">
               <i class="fas fa-external-link-alt"></i> Open Direct Link
             </button>
+            <button id="iframe-video" class="btn btn-secondary">
+              <i class="fas fa-play-circle"></i> Try Iframe Player
+            </button>
           </div>
         `;
         
@@ -567,7 +612,7 @@ function formatViews(views) {
           
           // Get the source element and its URL
           const source = videoElement.querySelector('source');
-          const directUrl = source?.dataset?.original || source?.src;
+          const directUrl = source?.dataset?.original || source?.src || videoElement.src;
           
           if (directUrl) {
             // Try with direct URL
@@ -583,10 +628,22 @@ function formatViews(views) {
         // Add direct link functionality
         document.getElementById('direct-video')?.addEventListener('click', () => {
           const source = videoElement.querySelector('source');
-          const directUrl = source?.dataset?.original || source?.src;
+          const directUrl = source?.dataset?.original || source?.src || videoElement.src;
           
           if (directUrl) {
             window.open(directUrl, '_blank');
+          }
+        });
+        
+        // Add iframe player functionality
+        document.getElementById('iframe-video')?.addEventListener('click', () => {
+          const source = videoElement.querySelector('source');
+          const directUrl = source?.dataset?.original || source?.src || videoElement.src;
+          
+          if (directUrl) {
+            // Replace video element with iframe
+            videoContainer.innerHTML = '';
+            videoContainer.appendChild(createIframePlayer(directUrl));
           }
         });
       }
@@ -1089,103 +1146,166 @@ function formatViews(views) {
           throw new Error('Invalid video URL provided');
         }
         
-        // Get the streaming URL - IMPORTANT: This is where we create the stream URL
-        const streamUrl = `/api/stream?url=${encodeURIComponent(video.raw_video_url)}`;
-        console.log('Stream URL:', streamUrl);
-        
         // Create video container
         const videoContainer = document.createElement('div');
         videoContainer.className = 'video-container';
         
-        // Create video player with direct URL as fallback
-        videoContainer.innerHTML = `
-          <div class="player-wrapper">
-            <video id="video-player" controls preload="auto" poster="${video.thumbnail_url}">
-              <source src="${streamUrl}" type="video/mp4" data-original="${video.raw_video_url}">
-              Your browser does not support the video tag.
-            </video>
-          </div>
-          <div class="video-details">
-            <h1>${video.title}</h1>
-            <div class="video-stats">
-              <span><i class="fas fa-eye"></i> ${formatViews(video.views)} views</span>
-              <span><i class="fas fa-calendar-alt"></i> ${formatDate(video.created_at)}</span>
-            </div>
-            <div class="video-actions">
-              <button id="like-button" class="like-button">
-                <i class="fas fa-thumbs-up"></i>
-                <span>${video.likes}</span>
-              </button>
-              <button id="share-button" class="btn btn-secondary">
-                <i class="fas fa-share"></i> Share
-              </button>
-              <button id="direct-link-button" class="btn btn-secondary" data-url="${video.raw_video_url}">
-                <i class="fas fa-external-link-alt"></i> Direct Link
-              </button>
-              <button id="debug-button" class="btn btn-secondary">
-                <i class="fas fa-bug"></i> Debug Stream
-              </button>
-            </div>
-            <div class="uploader-info">
-              <div class="uploader-avatar">
-                <img src="${video.user_profile_image || 'https://via.placeholder.com/40'}" alt="${video.username}">
-              </div>
-              <div class="uploader-details">
-                <h3>Uploaded by <a href="/profile?id=${video.user_id}">${video.username}</a></h3>
+        // Check if it's an MKV file
+        const isMkv = video.raw_video_url.toLowerCase().endsWith('.mkv');
+        
+        if (isMkv) {
+          // For MKV files, show special notice with options
+          videoContainer.innerHTML = `
+            <div class="player-wrapper">
+              <div class="mkv-notice">
+                <i class="fas fa-info-circle fa-3x"></i>
+                <h3>MKV File Detected</h3>
+                <p>MKV files may not play directly in the browser. Try one of these options:</p>
+                <div class="mkv-options">
+                  <a href="${video.raw_video_url}" class="btn btn-primary" target="_blank">
+                    <i class="fas fa-download"></i> Download and Play Locally
+                  </a>
+                  <button id="vlc-button" class="btn btn-secondary">
+                    <i class="fas fa-play-circle"></i> Open in VLC
+                  </button>
+                  <button id="external-player-button" class="btn btn-secondary">
+                    <i class="fas fa-external-link-alt"></i> Use External Player
+                  </button>
+                  <button id="iframe-button" class="btn btn-secondary">
+                    <i class="fas fa-play-circle"></i> Try Iframe Player
+                  </button>
+                </div>
               </div>
             </div>
-            <div class="video-description">
-              <h3>Description</h3>
-              <p>${video.description || 'No description provided.'}</p>
+            <div class="video-details">
+              <h1>${video.title}</h1>
+              <div class="video-stats">
+                <span><i class="fas fa-eye"></i> ${formatViews(video.views)} views</span>
+                <span><i class="fas fa-calendar-alt"></i> ${formatDate(video.created_at)}</span>
+              </div>
+              <div class="video-actions">
+                <button id="like-button" class="like-button">
+                  <i class="fas fa-thumbs-up"></i>
+                  <span>${video.likes}</span>
+                </button>
+                <button id="share-button" class="btn btn-secondary">
+                  <i class="fas fa-share"></i> Share
+                </button>
+                <a href="${video.raw_video_url}" class="btn btn-secondary" target="_blank">
+                  <i class="fas fa-external-link-alt"></i> Direct Link
+                </a>
+              </div>
+              <div class="uploader-info">
+                <div class="uploader-avatar">
+                  <img src="${video.user_profile_image || 'https://via.placeholder.com/40'}" alt="${video.username}">
+                </div>
+                <div class="uploader-details">
+                  <h3>Uploaded by <a href="/profile?id=${video.user_id}">${video.username}</a></h3>
+                </div>
+              </div>
+              <div class="video-description">
+                <h3>Description</h3>
+                <p>${video.description || 'No description provided.'}</p>
+              </div>
             </div>
-          </div>
-        `;
+          `;
+        } else {
+          // For regular videos, create video player with both options
+          videoContainer.innerHTML = `
+            <div class="player-wrapper">
+              <video id="video-player" controls preload="auto" poster="${video.thumbnail_url}">
+                Your browser does not support the video tag.
+              </video>
+            </div>
+            <div class="video-details">
+              <h1>${video.title}</h1>
+              <div class="video-stats">
+                <span><i class="fas fa-eye"></i> ${formatViews(video.views)} views</span>
+                <span><i class="fas fa-calendar-alt"></i> ${formatDate(video.created_at)}</span>
+              </div>
+              <div class="video-actions">
+                <button id="like-button" class="like-button">
+                  <i class="fas fa-thumbs-up"></i>
+                  <span>${video.likes}</span>
+                </button>
+                <button id="share-button" class="btn btn-secondary">
+                  <i class="fas fa-share"></i> Share
+                </button>
+                <button id="direct-link-button" class="btn btn-secondary" data-url="${video.raw_video_url}">
+                  <i class="fas fa-external-link-alt"></i> Direct Link
+                </button>
+                <button id="direct-button" class="btn btn-secondary">
+                  <i class="fas fa-link"></i> Direct URL
+                </button>
+                <button id="iframe-button" class="btn btn-secondary">
+                  <i class="fas fa-play-circle"></i> Iframe Player
+                </button>
+              </div>
+              <div class="uploader-info">
+                <div class="uploader-avatar">
+                  <img src="${video.user_profile_image || 'https://via.placeholder.com/40'}" alt="${video.username}">
+                </div>
+                <div class="uploader-details">
+                  <h3>Uploaded by <a href="/profile?id=${video.user_id}">${video.username}</a></h3>
+                </div>
+              </div>
+              <div class="video-description">
+                <h3>Description</h3>
+                <p>${video.description || 'No description provided.'}</p>
+              </div>
+            </div>
+          `;
+        }
         
         mainContent.innerHTML = '';
         mainContent.appendChild(videoContainer);
         
-        // Initialize video player
-        const videoElement = document.getElementById('video-player');
-        
-        // Add debug button functionality
-        document.getElementById('debug-button')?.addEventListener('click', () => {
-          // Open the stream URL in a new tab for debugging
-          window.open(streamUrl, '_blank');
+        if (isMkv) {
+          // Add VLC button functionality
+          document.getElementById('vlc-button')?.addEventListener('click', () => {
+            window.location.href = `vlc://${video.raw_video_url}`;
+          });
           
-          // Also try to fetch the stream URL with fetch API to see if it works
-          fetch(streamUrl)
-            .then(response => {
-              console.log('Debug fetch response:', response);
-              showToast(`Stream status: ${response.status} ${response.statusText}`, 'info');
-            })
-            .catch(error => {
-              console.error('Debug fetch error:', error);
-              showToast(`Stream error: ${error.message}`, 'error');
-            });
-        });
-        
-        // Add direct link functionality
-        document.getElementById('direct-link-button')?.addEventListener('click', () => {
-          window.open(video.raw_video_url, '_blank');
-        });
-        
-        // Log when video starts loading
-        videoElement.addEventListener('loadstart', () => {
-          console.log('Video loading started');
-        });
-        
-        // Log when metadata is loaded
-        videoElement.addEventListener('loadedmetadata', () => {
-          console.log('Video metadata loaded');
-        });
-        
-        // Log when video can play
-        videoElement.addEventListener('canplay', () => {
-          console.log('Video can play now');
-        });
-        
-        // Initialize video player with keyboard shortcuts, etc.
-        initializeVideoPlayer(videoElement);
+          // Add external player button functionality
+          document.getElementById('external-player-button')?.addEventListener('click', () => {
+            window.open(`https://www.hlsplayer.org/play?url=${encodeURIComponent(video.raw_video_url)}`, '_blank');
+          });
+          
+          // Add iframe player button functionality
+          document.getElementById('iframe-button')?.addEventListener('click', () => {
+            const playerWrapper = document.querySelector('.player-wrapper');
+            playerWrapper.innerHTML = '';
+            playerWrapper.appendChild(createIframePlayer(video.raw_video_url));
+          });
+        } else {
+          // Get video element
+          const videoElement = document.getElementById('video-player');
+          
+          // Try direct URL first
+          videoElement.src = video.raw_video_url;
+          
+          // Add direct link functionality
+          document.getElementById('direct-link-button')?.addEventListener('click', () => {
+            window.open(video.raw_video_url, '_blank');
+          });
+          
+          // Add direct URL button functionality
+          document.getElementById('direct-button')?.addEventListener('click', () => {
+            videoElement.src = video.raw_video_url;
+            videoElement.load();
+            videoElement.play().catch(err => console.error('Play failed:', err));
+          });
+          
+          // Add iframe player button functionality
+          document.getElementById('iframe-button')?.addEventListener('click', () => {
+            const playerWrapper = document.querySelector('.player-wrapper');
+            playerWrapper.innerHTML = '';
+            playerWrapper.appendChild(createIframePlayer(video.raw_video_url));
+          });
+          
+          // Initialize video player
+          initializeVideoPlayer(videoElement);
+        }
         
         // Handle like button
         const likeButton = document.getElementById('like-button');
@@ -1211,26 +1331,7 @@ function formatViews(views) {
         // Add share functionality
         document.getElementById('share-button')?.addEventListener('click', () => {
           const videoUrl = window.location.href;
-          
-          // Use Web Share API if available
-          if (navigator.share) {
-            navigator.share({
-              title: video.title,
-              text: `Check out this video: ${video.title}`,
-              url: videoUrl
-            })
-            .then(() => {
-              console.log('Successfully shared');
-            })
-            .catch((error) => {
-              console.error('Error sharing:', error);
-              // Fallback to clipboard
-              copyToClipboard(videoUrl);
-            });
-          } else {
-            // Fallback to clipboard
-            copyToClipboard(videoUrl);
-          }
+          copyToClipboard(videoUrl);
         });
         
         // Load related videos

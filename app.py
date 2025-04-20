@@ -1,8 +1,8 @@
-from fastapi import FastAPI, Request, HTTPException, Depends, Query, UploadFile, File
+from fastapi import FastAPI, Request, HTTPException, Depends, Query, UploadFile, File, Header
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse, Response
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
@@ -183,36 +183,53 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     return UserInDB(**user)
 
 # Video streaming function
-async def stream_video(url: str):
-    """Stream video from URL directly through the server"""
-    print(f"Attempting to stream video from: {url}")
+async def stream_video(url: str, range_header: str = None):
+    """Stream video from URL directly through the server with range support"""
+    print(f"Attempting to stream video from: {url}, Range: {range_header}")
     try:
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+            "Accept": "*/*",
+            "Accept-Encoding": "gzip, deflate, br"
         }
+        
+        # Add range header if provided
+        if range_header:
+            headers["Range"] = range_header
+            print(f"Forwarding range request: {range_header}")
         
         async with aiohttp.ClientSession() as session:
             async with session.get(url, headers=headers, allow_redirects=True) as response:
                 print(f"Stream response status: {response.status}")
                 
-                if response.status != 200:
+                if response.status not in (200, 206):  # 200 OK or 206 Partial Content
                     print(f"Failed to fetch video: {await response.text()}")
                     raise HTTPException(status_code=response.status, detail=f"Failed to fetch video: {response.status}")
                 
                 # Get content type and headers
                 content_type = response.headers.get("Content-Type", "video/mp4")
                 content_length = response.headers.get("Content-Length")
+                content_range = response.headers.get("Content-Range")
                 
                 print(f"Content-Type: {content_type}")
                 print(f"Content-Length: {content_length}")
+                print(f"Content-Range: {content_range}")
                 
-                headers = {
+                # Prepare response headers
+                resp_headers = {
                     "Content-Type": content_type,
-                    "Accept-Ranges": "bytes"
+                    "Accept-Ranges": "bytes",
+                    "Access-Control-Allow-Origin": "*"
                 }
                 
                 if content_length:
-                    headers["Content-Length"] = content_length
+                    resp_headers["Content-Length"] = content_length
+                
+                if content_range:
+                    resp_headers["Content-Range"] = content_range
+                    status_code = 206  # Partial Content
+                else:
+                    status_code = 200  # OK
                 
                 # Create async generator to stream the content
                 async def generate():
@@ -226,7 +243,8 @@ async def stream_video(url: str):
                 return StreamingResponse(
                     generate(),
                     media_type=content_type,
-                    headers=headers
+                    headers=resp_headers,
+                    status_code=status_code
                 )
     except Exception as e:
         print(f"Streaming error: {str(e)}")
@@ -454,16 +472,30 @@ async def like_video(video_id: str, current_user: UserInDB = Depends(get_current
         "likes": updated_video["likes"]
     }
 
-# Direct video streaming endpoint - no need for Cloudflare Worker
-@app.get("/api/stream")
-async def stream_video_endpoint(url: str):
+# Direct video streaming endpoint with support for both GET and HEAD
+@app.api_route("/api/stream", methods=["GET", "HEAD"])
+async def stream_video_endpoint(request: Request, url: str, range: str = Header(None)):
     if not url:
         raise HTTPException(status_code=400, detail="Missing URL parameter")
     
-    print(f"Stream request received for URL: {url}")
+    print(f"Stream request received for URL: {url}, Method: {request.method}, Range: {range}")
     
+    # For HEAD requests, just return headers without body
+    if request.method == "HEAD":
+        try:
+            headers = {
+                "Accept-Ranges": "bytes",
+                "Content-Type": "video/mp4",  # Default content type
+                "Access-Control-Allow-Origin": "*"
+            }
+            return Response(headers=headers)
+        except Exception as e:
+            print(f"Error handling HEAD request: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Error handling HEAD request: {str(e)}")
+    
+    # For GET requests, stream the video
     try:
-        return await stream_video(url)
+        return await stream_video(url, range)
     except Exception as e:
         print(f"Error streaming video: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error streaming video: {str(e)}")
@@ -570,6 +602,7 @@ async def debug_direct_stream_test():
             h1 { color: #53fc18; }
             #error { margin-top: 10px; }
             pre { background: #18181b; padding: 10px; overflow: auto; }
+            .option-buttons { display: flex; gap: 10px; margin-top: 10px; }
         </style>
     </head>
     <body>
@@ -577,9 +610,14 @@ async def debug_direct_stream_test():
         <div>
             <input type="text" id="video-url" placeholder="Enter video URL" 
                    value="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4">
-            <button onclick="loadVideo()">Load Video</button>
+            <div class="option-buttons">
+                <button onclick="loadVideo('stream')">Use Stream API</button>
+                <button onclick="loadVideo('direct')">Use Direct URL</button>
+                <button onclick="loadVideo('iframe')">Use Iframe</button>
+                <button onclick="loadVideo('external')">Use External Player</button>
+            </div>
         </div>
-        <div class="video-container">
+        <div class="video-container" id="player-container">
             <video id="video-player" controls></video>
         </div>
         <div id="error" style="color: #ff4d4d;"></div>
@@ -589,10 +627,12 @@ async def debug_direct_stream_test():
         </div>
         
         <script>
-            function loadVideo() {
+            function loadVideo(method) {
                 const videoUrl = document.getElementById('video-url').value;
                 const errorDiv = document.getElementById('error');
                 const debugInfo = document.getElementById('debug-info');
+                const playerContainer = document.getElementById('player-container');
+                
                 errorDiv.textContent = '';
                 
                 if (!videoUrl) {
@@ -601,69 +641,139 @@ async def debug_direct_stream_test():
                 }
                 
                 // Log the process
-                debugInfo.textContent = 'Starting video load process...\\n';
-                
-                const encodedUrl = encodeURIComponent(videoUrl);
-                const streamUrl = `/api/stream?url=${encodedUrl}`;
-                
+                debugInfo.textContent = `Starting video load process using ${method}...\\n`;
                 debugInfo.textContent += `Original URL: ${videoUrl}\\n`;
-                debugInfo.textContent += `Encoded URL: ${encodedUrl}\\n`;
-                debugInfo.textContent += `Stream URL: ${streamUrl}\\n`;
                 
-                // First try to fetch the headers to see if the endpoint works
-                fetch(streamUrl, { method: 'HEAD' })
-                    .then(response => {
-                        debugInfo.textContent += `HEAD request status: ${response.status} ${response.statusText}\\n`;
-                        
-                        // Log headers
-                        debugInfo.textContent += 'Response headers:\\n';
-                        for (let [key, value] of response.headers.entries()) {
-                            debugInfo.textContent += `${key}: ${value}\\n`;
-                        }
-                        
-                        if (response.ok) {
-                            // Now try to load the video
-                            const videoPlayer = document.getElementById('video-player');
-                            videoPlayer.src = streamUrl;
-                            
-                            videoPlayer.onerror = function() {
-                                errorDiv.textContent = 'Error loading video: ' + (videoPlayer.error ? videoPlayer.error.message : 'Unknown error');
-                                debugInfo.textContent += `Video error: ${videoPlayer.error ? videoPlayer.error.message : 'Unknown error'}\\n`;
-                            };
-                            
-                            videoPlayer.onloadstart = function() {
-                                debugInfo.textContent += 'Video load started\\n';
-                            };
-                            
-                            videoPlayer.onloadedmetadata = function() {
-                                debugInfo.textContent += `Video metadata loaded: ${videoPlayer.videoWidth}x${videoPlayer.videoHeight}, duration: ${videoPlayer.duration}s\\n`;
-                            };
-                            
-                            videoPlayer.oncanplay = function() {
-                                debugInfo.textContent += 'Video can play now\\n';
-                            };
-                            
-                            videoPlayer.onplaying = function() {
-                                debugInfo.textContent += 'Video is playing\\n';
-                            };
-                            
-                            videoPlayer.load();
-                            videoPlayer.play().catch(err => {
-                                debugInfo.textContent += `Play failed: ${err.message}\\n`;
-                                console.error('Play failed:', err);
-                            });
-                        } else {
-                            errorDiv.textContent = `Error: ${response.status} ${response.statusText}`;
-                        }
-                    })
-                    .catch(err => {
-                        debugInfo.textContent += `Fetch error: ${err.message}\\n`;
-                        errorDiv.textContent = `Fetch error: ${err.message}`;
+                if (method === 'stream') {
+                    // Use streaming API
+                    const encodedUrl = encodeURIComponent(videoUrl);
+                    const streamUrl = `/api/stream?url=${encodedUrl}`;
+                    
+                    debugInfo.textContent += `Encoded URL: ${encodedUrl}\\n`;
+                    debugInfo.textContent += `Stream URL: ${streamUrl}\\n`;
+                    
+                    playerContainer.innerHTML = '<video id="video-player" controls></video>';
+                    const videoPlayer = document.getElementById('video-player');
+                    
+                    videoPlayer.src = streamUrl;
+                    
+                    videoPlayer.onerror = function() {
+                        errorDiv.textContent = 'Error loading video: ' + (videoPlayer.error ? videoPlayer.error.message : 'Unknown error');
+                        debugInfo.textContent += `Video error: ${videoPlayer.error ? videoPlayer.error.message : 'Unknown error'}\\n`;
+                    };
+                    
+                    videoPlayer.onloadstart = function() {
+                        debugInfo.textContent += 'Video load started\\n';
+                    };
+                    
+                    videoPlayer.onloadedmetadata = function() {
+                        debugInfo.textContent += `Video metadata loaded: ${videoPlayer.videoWidth}x${videoPlayer.videoHeight}, duration: ${videoPlayer.duration}s\\n`;
+                    };
+                    
+                    videoPlayer.oncanplay = function() {
+                        debugInfo.textContent += 'Video can play now\\n';
+                    };
+                    
+                    videoPlayer.onplaying = function() {
+                        debugInfo.textContent += 'Video is playing\\n';
+                    };
+                    
+                    videoPlayer.load();
+                    videoPlayer.play().catch(err => {
+                        debugInfo.textContent += `Play failed: ${err.message}\\n`;
+                        console.error('Play failed:', err);
                     });
+                } 
+                else if (method === 'direct') {
+                    // Use direct URL
+                    playerContainer.innerHTML = '<video id="video-player" controls></video>';
+                    const videoPlayer = document.getElementById('video-player');
+                    
+                    debugInfo.textContent += `Using direct URL for playback\\n`;
+                    
+                    videoPlayer.src = videoUrl;
+                    
+                    videoPlayer.onerror = function() {
+                        errorDiv.textContent = 'Error loading video: ' + (videoPlayer.error ? videoPlayer.error.message : 'Unknown error');
+                        debugInfo.textContent += `Video error: ${videoPlayer.error ? videoPlayer.error.message : 'Unknown error'}\\n`;
+                    };
+                    
+                    videoPlayer.onloadstart = function() {
+                        debugInfo.textContent += 'Video load started\\n';
+                    };
+                    
+                    videoPlayer.onloadedmetadata = function() {
+                        debugInfo.textContent += `Video metadata loaded: ${videoPlayer.videoWidth}x${videoPlayer.videoHeight}, duration: ${videoPlayer.duration}s\\n`;
+                    };
+                    
+                    videoPlayer.load();
+                    videoPlayer.play().catch(err => {
+                        debugInfo.textContent += `Play failed: ${err.message}\\n`;
+                        console.error('Play failed:', err);
+                    });
+                }
+                else if (method === 'iframe') {
+                    // Use iframe
+                    debugInfo.textContent += `Using iframe for playback\\n`;
+                    
+                    // Create HTML for iframe content
+                    const playerHtml = `
+                        <!DOCTYPE html>
+                        <html>
+                        <head>
+                            <meta charset="UTF-8">
+                            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                            <title>Video Player</title>
+                            <style>
+                                body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
+                                video { width: 100%; height: 100%; }
+                            </style>
+                        </head>
+                        <body>
+                            <video controls autoplay src="${videoUrl}"></video>
+                        </body>
+                        </html>
+                    `;
+                    
+                    // Create blob URL
+                    const blob = new Blob([playerHtml], { type: 'text/html' });
+                    const blobUrl = URL.createObjectURL(blob);
+                    
+                    debugInfo.textContent += `Created blob URL: ${blobUrl}\\n`;
+                    
+                    // Create iframe
+                    playerContainer.innerHTML = `<iframe id="video-iframe" style="width:100%; height:400px; border:none;" allowfullscreen></iframe>`;
+                    const iframe = document.getElementById('video-iframe');
+                    iframe.src = blobUrl;
+                }
+                else if (method === 'external') {
+                    // Use external player
+                    debugInfo.textContent += `Using external player for playback\\n`;
+                    
+                    // For MKV files, use an external player
+                    let externalPlayerUrl;
+                    
+                    if (videoUrl.toLowerCase().endsWith('.mkv')) {
+                        externalPlayerUrl = `https://www.hlsplayer.org/play?url=${encodeURIComponent(videoUrl)}`;
+                        debugInfo.textContent += `MKV file detected, using HLS player\\n`;
+                    } else {
+                        externalPlayerUrl = `https://www.hlsplayer.org/play?url=${encodeURIComponent(videoUrl)}`;
+                        debugInfo.textContent += `Using HLS player\\n`;
+                    }
+                    
+                    debugInfo.textContent += `External player URL: ${externalPlayerUrl}\\n`;
+                    
+                    // Create iframe for external player
+                    playerContainer.innerHTML = `<iframe id="external-player" style="width:100%; height:400px; border:none;" allowfullscreen></iframe>`;
+                    const iframe = document.getElementById('external-player');
+                    iframe.src = externalPlayerUrl;
+                }
             }
             
             // Load a default video on page load
-            window.onload = loadVideo;
+            window.onload = function() {
+                loadVideo('direct');
+            };
         </script>
     </body>
     </html>
