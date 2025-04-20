@@ -4,7 +4,7 @@ const API = {
   baseUrl: '/api',
   
   // Worker URL for video streaming
-  workerUrl: 'https://your-worker.your-subdomain.workers.dev',
+  workerUrl: 'https://lively-wind-62c0.skibiditoilet-9330jk.workers.dev',
   
   // Get auth token
   getToken() {

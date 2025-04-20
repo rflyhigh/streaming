@@ -237,7 +237,7 @@ function loadProfilePage() {
     <div class="profile-container">
       <div class="profile-header">
         <div class="profile-avatar">
-          <img src="${user.profile_image || '/static/assets/images/default-avatar.png'}" alt="${user.username}">
+          <img src="${user.profile_image || 'https://via.placeholder.com/100'}" alt="${user.username}">
         </div>
         <div class="profile-info">
           <h1>${user.username}</h1>

@@ -11,6 +11,6 @@ class Settings(BaseSettings):
     SECRET_KEY: str = os.getenv("SECRET_KEY", "your-secret-key-here")
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
-    WORKER_URL: str = os.getenv("WORKER_URL", "https://your-worker.your-subdomain.workers.dev")
+    WORKER_URL: str = os.getenv("WORKER_URL", "https://lively-wind-62c0.skibiditoilet-9330jk.workers.dev")
 
 settings = Settings()

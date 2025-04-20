@@ -1,7 +1,7 @@
 // Authentication handling
 const Auth = {
   // Storage keys
-  TOKEN_KEY: 'auth_token',
+  TOKEN_KEY: 'token',
   USER_KEY: 'user_data',
   
   // Check if user is logged in

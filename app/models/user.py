@@ -22,7 +22,7 @@ class UserBase(BaseModel):
     username: str
     email: EmailStr
 
-class UserCreate(UserBase):  # This class is missing in your file
+class UserCreate(UserBase):
     password: str
 
 class UserInDB(UserBase):
