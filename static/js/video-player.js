@@ -49,14 +49,22 @@ function initializeVideoPlayer(videoElement) {
   });
   
   // Handle video errors
-  videoElement.addEventListener('error', () => {
+  videoElement.addEventListener('error', (e) => {
     console.error('Video error:', videoElement.error);
+    console.error('Error details:', e);
+    
+    // Check the source
+    const source = videoElement.querySelector('source');
+    if (source) {
+      console.log('Video source URL:', source.src);
+    }
     
     const videoContainer = videoElement.parentElement;
     if (videoContainer) {
       videoContainer.innerHTML = `
         <div class="video-error">
-          <p>Error loading video. Please try again later.</p>
+          <p>Error streaming video: ${videoElement.error ? videoElement.error.message : 'Unknown error'}</p>
+          <p>Please try again later or check the video URL.</p>
         </div>
       `;
     }
@@ -64,4 +72,14 @@ function initializeVideoPlayer(videoElement) {
   
   // Preload metadata
   videoElement.preload = 'metadata';
+  
+  // Log when video starts playing
+  videoElement.addEventListener('playing', () => {
+    console.log('Video started playing');
+  });
+  
+  // Log when video fails to load
+  videoElement.addEventListener('loadeddata', () => {
+    console.log('Video data loaded successfully');
+  });
 }

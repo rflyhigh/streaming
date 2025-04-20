@@ -312,6 +312,18 @@ function loadVideoPage() {
   
   API.getVideoById(videoId)
     .then(video => {
+      // Log the raw video URL for debugging
+      console.log('Raw video URL:', video.raw_video_url);
+      
+      // Check if the video URL is valid
+      if (!video.raw_video_url || typeof video.raw_video_url !== 'string' || !video.raw_video_url.startsWith('http')) {
+        throw new Error('Invalid video URL provided');
+      }
+      
+      // Get the streaming URL
+      const streamUrl = API.getStreamUrl(video.raw_video_url);
+      console.log('Stream URL:', streamUrl);
+      
       // Create video container
       const videoContainer = document.createElement('div');
       videoContainer.className = 'video-container';
@@ -320,7 +332,7 @@ function loadVideoPage() {
       videoContainer.innerHTML = `
         <div class="player-wrapper">
           <video id="video-player" controls>
-            <source src="${API.getStreamUrl(video.raw_video_url)}" type="video/mp4">
+            <source src="${streamUrl}" type="video/mp4">
             Your browser does not support the video tag.
           </video>
         </div>
@@ -375,6 +387,7 @@ function loadVideoPage() {
       });
     })
     .catch(error => {
+      console.error('Error loading video:', error);
       mainContent.innerHTML = `
         <div class="error">
           <p>Error loading video: ${error.message}</p>

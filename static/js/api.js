@@ -155,6 +155,16 @@ const API = {
   
   // Get streaming URL
   getStreamUrl(rawVideoUrl) {
-    return `${this.workerUrl}?url=${encodeURIComponent(rawVideoUrl)}`;
+    // Check if the URL is valid
+    if (!rawVideoUrl || typeof rawVideoUrl !== 'string' || !rawVideoUrl.startsWith('http')) {
+      console.error('Invalid video URL:', rawVideoUrl);
+      return '';
+    }
+    
+    // Properly encode the URL
+    const encodedUrl = encodeURIComponent(rawVideoUrl);
+    console.log('Encoded URL for worker:', encodedUrl);
+    
+    return `${this.workerUrl}?url=${encodedUrl}`;
   }
 };
