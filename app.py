@@ -21,12 +21,14 @@ def stream_video():
     try:
         # Get range header if present
         range_header = request.headers.get('Range')
-        headers = {}
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
         if range_header:
             headers['Range'] = range_header
         
         # Make a HEAD request to get content info
-        head_response = requests.head(video_url, headers=headers, allow_redirects=True)
+        head_response = requests.head(video_url, headers=headers, allow_redirects=True, timeout=30)
         
         # Prepare headers for our response
         response_headers = {
@@ -34,14 +36,14 @@ def stream_video():
             'Accept-Ranges': 'bytes',
             'Access-Control-Allow-Origin': '*',
             'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
-            'Access-Control-Allow-Headers': 'Range'
+            'Access-Control-Allow-Headers': 'Range, Origin, X-Requested-With, Content-Type, Accept'
         }
         
         # Copy content type if available
         if 'Content-Type' in head_response.headers:
             content_type = head_response.headers['Content-Type']
-            # If it's an octet-stream (generic binary), force it to be video/mp4
-            if content_type == 'application/octet-stream':
+            # If it's an octet-stream (generic binary) or mkv, force it to be video/mp4
+            if content_type == 'application/octet-stream' or 'matroska' in content_type.lower():
                 content_type = 'video/mp4'
             response_headers['Content-Type'] = content_type
         
@@ -60,11 +62,16 @@ def stream_video():
         
         # Stream the video in chunks
         def generate():
-            # Use streaming GET request
-            with requests.get(video_url, headers=headers, stream=True, allow_redirects=True) as r:
-                for chunk in r.iter_content(chunk_size=CHUNK_SIZE):
-                    if chunk:
-                        yield chunk
+            try:
+                # Use streaming GET request
+                with requests.get(video_url, headers=headers, stream=True, allow_redirects=True, timeout=30) as r:
+                    r.raise_for_status()  # Raise an exception for 4XX/5XX responses
+                    for chunk in r.iter_content(chunk_size=CHUNK_SIZE):
+                        if chunk:
+                            yield chunk
+            except Exception as stream_error:
+                logging.error(f"Streaming error: {str(stream_error)}")
+                # Return empty to end stream
         
         return Response(
             stream_with_context(generate()),
@@ -77,4 +84,4 @@ def stream_video():
         return f"Error streaming video: {str(e)}", 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=10000)  # Changed to match your port in logs
