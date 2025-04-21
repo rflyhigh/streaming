@@ -10,6 +10,7 @@ import threading
 from urllib.parse import unquote
 from flask_cors import CORS
 import shutil
+import json
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
@@ -195,53 +196,101 @@ def is_mkv_or_webm(url):
 @app.route('/status/<job_id>')
 def job_status(job_id):
     """Get the status of a transcoding job."""
-    with LOCK:
-        if job_id in TRANSCODING_JOBS:
-            return jsonify(TRANSCODING_JOBS[job_id])
-        else:
-            return jsonify({'status': 'not_found'}), 404
+    try:
+        with LOCK:
+            if job_id in TRANSCODING_JOBS:
+                # Convert to a serializable dict
+                job_data = {
+                    'job_id': TRANSCODING_JOBS[job_id].get('job_id', ''),
+                    'status': TRANSCODING_JOBS[job_id].get('status', 'unknown'),
+                    'progress': TRANSCODING_JOBS[job_id].get('progress', 0),
+                    'error': TRANSCODING_JOBS[job_id].get('error', '')
+                }
+                
+                # Ensure we're returning valid JSON
+                response = app.response_class(
+                    response=json.dumps(job_data),
+                    status=200,
+                    mimetype='application/json'
+                )
+                return response
+            else:
+                response = app.response_class(
+                    response=json.dumps({'status': 'not_found', 'error': 'Job not found'}),
+                    status=404,
+                    mimetype='application/json'
+                )
+                return response
+    except Exception as e:
+        logging.error(f"Error in job_status: {str(e)}")
+        response = app.response_class(
+            response=json.dumps({'status': 'error', 'error': str(e)}),
+            status=500,
+            mimetype='application/json'
+        )
+        return response
 
 @app.route('/transcode')
 def transcode_video():
     """Start a transcoding job."""
-    video_url = request.args.get('url')
-    if not video_url:
-        return jsonify({'error': 'No URL provided'}), 400
-    
-    video_url = unquote(video_url)
-    
-    # Generate a job ID
-    job_id = hashlib.md5((video_url + str(time.time())).encode()).hexdigest()
-    
-    # Check if already cached
-    if is_file_cached(video_url):
-        return jsonify({
-            'job_id': job_id,
-            'status': 'completed',
-            'progress': 100,
-            'cache_path': get_cache_path(video_url)
-        })
-    
-    # Create a new job
-    with LOCK:
-        TRANSCODING_JOBS[job_id] = {
-            'job_id': job_id,
-            'video_url': video_url,
-            'status': 'queued',
-            'progress': 0,
-            'start_time': time.time()
-        }
-    
-    # Start transcoding in a background thread
-    thread = threading.Thread(target=transcode_job, args=(video_url, job_id))
-    thread.daemon = True
-    thread.start()
-    
-    return jsonify({
-        'job_id': job_id,
-        'status': 'queued',
-        'progress': 0
-    })
+    try:
+        video_url = request.args.get('url')
+        if not video_url:
+            return app.response_class(
+                response=json.dumps({'error': 'No URL provided'}),
+                status=400,
+                mimetype='application/json'
+            )
+        
+        video_url = unquote(video_url)
+        
+        # Generate a job ID
+        job_id = hashlib.md5((video_url + str(time.time())).encode()).hexdigest()
+        
+        # Check if already cached
+        if is_file_cached(video_url):
+            return app.response_class(
+                response=json.dumps({
+                    'job_id': job_id,
+                    'status': 'completed',
+                    'progress': 100,
+                    'cache_path': get_cache_path(video_url)
+                }),
+                status=200,
+                mimetype='application/json'
+            )
+        
+        # Create a new job
+        with LOCK:
+            TRANSCODING_JOBS[job_id] = {
+                'job_id': job_id,
+                'video_url': video_url,
+                'status': 'queued',
+                'progress': 0,
+                'start_time': time.time()
+            }
+        
+        # Start transcoding in a background thread
+        thread = threading.Thread(target=transcode_job, args=(video_url, job_id))
+        thread.daemon = True
+        thread.start()
+        
+        return app.response_class(
+            response=json.dumps({
+                'job_id': job_id,
+                'status': 'queued',
+                'progress': 0
+            }),
+            status=200,
+            mimetype='application/json'
+        )
+    except Exception as e:
+        logging.error(f"Error in transcode_video: {str(e)}")
+        return app.response_class(
+            response=json.dumps({'error': str(e)}),
+            status=500,
+            mimetype='application/json'
+        )
 
 @app.route('/stream')
 def stream_video():
@@ -250,7 +299,11 @@ def stream_video():
     job_id = request.args.get('job_id')
     
     if not video_url:
-        return "No URL provided", 400
+        return app.response_class(
+            response=json.dumps({'error': 'No URL provided'}),
+            status=400,
+            mimetype='application/json'
+        )
     
     video_url = unquote(video_url)
     
@@ -273,32 +326,48 @@ def stream_video():
             if not is_file_cached(video_url):
                 # If not cached and no job ID, return error
                 if not job_id:
-                    return jsonify({
-                        'error': 'Video needs transcoding first',
-                        'needs_transcoding': True
-                    }), 400
+                    return app.response_class(
+                        response=json.dumps({
+                            'error': 'Video needs transcoding first',
+                            'needs_transcoding': True
+                        }),
+                        status=400,
+                        mimetype='application/json'
+                    )
                 
                 # Check job status
                 with LOCK:
                     if job_id not in TRANSCODING_JOBS:
-                        return jsonify({
-                            'error': 'Invalid job ID',
-                            'needs_transcoding': True
-                        }), 400
+                        return app.response_class(
+                            response=json.dumps({
+                                'error': 'Invalid job ID',
+                                'needs_transcoding': True
+                            }),
+                            status=400,
+                            mimetype='application/json'
+                        )
                     
                     job = TRANSCODING_JOBS[job_id]
                     if job['status'] == 'failed':
-                        return jsonify({
-                            'error': f"Transcoding failed: {job.get('error', 'Unknown error')}",
-                            'needs_transcoding': True
-                        }), 500
+                        return app.response_class(
+                            response=json.dumps({
+                                'error': f"Transcoding failed: {job.get('error', 'Unknown error')}",
+                                'needs_transcoding': True
+                            }),
+                            status=500,
+                            mimetype='application/json'
+                        )
                     
                     if job['status'] != 'completed':
-                        return jsonify({
-                            'status': job['status'],
-                            'progress': job['progress'],
-                            'needs_transcoding': True
-                        }), 202  # Accepted but not ready
+                        return app.response_class(
+                            response=json.dumps({
+                                'status': job['status'],
+                                'progress': job['progress'],
+                                'needs_transcoding': True
+                            }),
+                            status=202,  # Accepted but not ready
+                            mimetype='application/json'
+                        )
             
             # If we get here, the file is cached or the job is completed
             # Stream the cached file
@@ -410,8 +479,21 @@ def stream_video():
             )
     
     except Exception as e:
-        logging.error(f"Error: {str(e)}")
-        return jsonify({'error': f"Error streaming video: {str(e)}"}), 500
+        logging.error(f"Error in stream_video: {str(e)}")
+        return app.response_class(
+            response=json.dumps({'error': f"Error streaming video: {str(e)}"}),
+            status=500,
+            mimetype='application/json'
+        )
+
+# Add a simple test endpoint
+@app.route('/test')
+def test():
+    return app.response_class(
+        response=json.dumps({'status': 'ok', 'message': 'API is working'}),
+        status=200,
+        mimetype='application/json'
+    )
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
